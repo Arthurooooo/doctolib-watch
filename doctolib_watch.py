@@ -301,6 +301,8 @@ def heartbeat(log_path, minutes=60):
         if ts < since:
             continue
         low = line.lower()
+        if "heartbeat" in low:
+            continue
         if any(m in low for m in ERROR_MARKERS):
             errors.append(line[22:])
         elif "dans la fenetre" in low:
