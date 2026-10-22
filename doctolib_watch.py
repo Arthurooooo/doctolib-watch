@@ -8,6 +8,7 @@ Usage :
   python3 doctolib_watch.py --test-notif                               # envoie une notif de test sur ton iPhone
   python3 doctolib_watch.py                                            # tourne en boucle, check toutes les ~10 min
   python3 doctolib_watch.py --once                                     # un seul check (cron / GitHub Actions)
+  python3 doctolib_watch.py --heartbeat                                # bilan de sante de la derniere heure (notif)
   python3 doctolib_watch.py --report                                   # check immediat + notif de bilan
   python3 doctolib_watch.py --listen                                   # checks manuels via ntfy (topic <topic>-check)
 
@@ -181,11 +182,11 @@ def in_window(iso):
     return NOT_BEFORE <= d <= NOT_AFTER
 
 
-def notify(title, message, click_url=None):
+def notify(title, message, click_url=None, priority="high", tags="stethoscope"):
     if not NTFY_TOPIC:
         log("Pas de topic ntfy configure, notif ignoree.")
         return
-    headers = {"Title": title.encode("utf-8"), "Priority": "high", "Tags": "stethoscope"}
+    headers = {"Title": title.encode("utf-8"), "Priority": priority, "Tags": tags}
     if click_url:
         headers["Click"] = click_url
     req = urllib.request.Request(
@@ -277,6 +278,43 @@ def run_once():
         ok = check_doctor(doc, state) or ok
     save_state(state)
     return ok
+
+
+ERROR_MARKERS = ("erreur", "refuse", "echec", "traceback", "aucun motif", "impossible")
+
+
+def heartbeat(log_path, minutes=60):
+    """Bilan de sante : les checks de la derniere heure ont-ils tourne sans erreur ?"""
+    since = datetime.now().timestamp() - minutes * 60
+    runs, errors = 0, []
+    try:
+        lines = Path(log_path).read_text(errors="replace").splitlines()
+    except Exception:
+        lines = []
+    for line in lines:
+        if not line.startswith("[") or len(line) < 21:
+            continue
+        try:
+            ts = datetime.strptime(line[1:20], "%Y-%m-%d %H:%M:%S").timestamp()
+        except ValueError:
+            continue
+        if ts < since:
+            continue
+        low = line.lower()
+        if any(m in low for m in ERROR_MARKERS):
+            errors.append(line[22:])
+        elif "dans la fenetre" in low:
+            runs += 1
+    expected = minutes // 10
+    if errors:
+        notify("Doctolib watch : erreur", f"{len(errors)} erreur(s) sur la derniere heure.\nDerniere : {errors[-1][:200]}",
+               priority="high", tags="warning")
+    elif runs == 0:
+        notify("Doctolib watch : aucun check", "Le script n'a pas tourne depuis une heure.", priority="high", tags="warning")
+    else:
+        notify("Doctolib watch OK", f"{runs}/{expected} checks sans erreur sur la derniere heure.",
+               priority="low", tags="white_check_mark")
+    log(f"Heartbeat : {runs} checks, {len(errors)} erreur(s)")
 
 
 def report():
@@ -378,6 +416,9 @@ def main():
             print('Usage : --probe "<lien fiche Doctolib>" [mot du motif]')
             return
         probe(args[0], args[1] if len(args) > 1 else None)
+        return
+    if "--heartbeat" in sys.argv:
+        heartbeat(Path(__file__).with_name("watch.log"))
         return
     if "--report" in sys.argv:
         report()
