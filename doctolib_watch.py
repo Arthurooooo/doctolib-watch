@@ -31,13 +31,7 @@ from pathlib import Path
 #   "motive"       : un mot du motif de RDV voulu (ex. "molluscum", "consultation")
 #   "url"          : optionnel, une URL availabilities.json si tu l'as deja
 # Peut etre remplace par la variable d'environnement DOCTORS_JSON (meme format, en JSON).
-DOCTORS = [
-    {
-        "name": "Exemple",
-        "booking_page": "https://www.doctolib.fr/dermatologue/paris/prenom-nom",
-        "motive": "consultation",
-    },
-]
+DOCTORS = []  # vide par defaut : configure via config.json ou la variable DOCTORS_JSON
 
 # Ne notifier que pour les creneaux dans cette fenetre (format AAAA-MM-JJ).
 NOT_BEFORE = os.environ.get("NOT_BEFORE", "2026-10-28")   # retour du Canada
@@ -46,8 +40,13 @@ NOT_AFTER = os.environ.get("NOT_AFTER", "2026-12-31")
 # Notifs push : app "ntfy" sur iPhone, abonne-toi a ce topic.
 NTFY_TOPIC = os.environ.get("NTFY_TOPIC", "")
 
+_cfg = Path(__file__).with_name("config.json")
 if os.environ.get("DOCTORS_JSON"):
     DOCTORS = json.loads(os.environ["DOCTORS_JSON"])
+elif _cfg.exists():
+    _c = json.loads(_cfg.read_text())
+    DOCTORS = _c.get("doctors", [])
+    NTFY_TOPIC = NTFY_TOPIC or _c.get("ntfy_topic", "")
 
 BASE = "https://www.doctolib.fr"
 
@@ -181,6 +180,9 @@ def in_window(iso):
 
 
 def notify(title, message, click_url=None):
+    if not NTFY_TOPIC:
+        log("Pas de topic ntfy configure, notif ignoree.")
+        return
     headers = {"Title": title.encode("utf-8"), "Priority": "high", "Tags": "stethoscope"}
     if click_url:
         headers["Click"] = click_url
@@ -262,6 +264,9 @@ def check_doctor(doc, state):
 
 
 def run_once():
+    if not DOCTORS:
+        log("Aucun medecin configure, rien a faire.")
+        return True
     state = load_state()
     ok = False
     for i, doc in enumerate(DOCTORS):
