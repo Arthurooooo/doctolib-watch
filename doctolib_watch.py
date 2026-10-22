@@ -295,7 +295,7 @@ def report():
         if slots:
             lines.append(f"{name} : {len(slots)} creneau(x), premier {fmt(slots[0])}")
         elif nxt and in_window(nxt):
-            lines.append(f"{name} : prochain jour dispo {fmt(nxt)}")
+            lines.append(f"{name} : {fmt(nxt)}")
         else:
             lines.append(f"{name} : rien entre le {NOT_BEFORE[8:]}/{NOT_BEFORE[5:7]} et le {NOT_AFTER[8:]}/{NOT_AFTER[5:7]}")
     save_state(state)
