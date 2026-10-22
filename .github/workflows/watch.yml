@@ -1,0 +1,42 @@
+name: Doctolib watch
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: doctolib-watch
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # Memoire entre deux runs : evite de renotifier les memes creneaux
+      - name: Restore state
+        uses: actions/cache/restore@v4
+        with:
+          path: .doctolib_watch_state.json
+          key: state-${{ github.run_id }}
+          restore-keys: state-
+
+      - name: Check Doctolib
+        env:
+          DOCTORS_JSON: ${{ secrets.DOCTORS_JSON }}
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+        run: python3 doctolib_watch.py --once
+
+      - name: Save state
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: .doctolib_watch_state.json
+          key: state-${{ github.run_id }}
