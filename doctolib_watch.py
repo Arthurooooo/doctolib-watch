@@ -8,6 +8,8 @@ Usage :
   python3 doctolib_watch.py --test-notif                               # envoie une notif de test sur ton iPhone
   python3 doctolib_watch.py                                            # tourne en boucle, check toutes les ~10 min
   python3 doctolib_watch.py --once                                     # un seul check (cron / GitHub Actions)
+  python3 doctolib_watch.py --report                                   # check immediat + notif de bilan
+  python3 doctolib_watch.py --listen                                   # checks manuels via ntfy (topic <topic>-check)
 
 Zero dependance : uniquement la lib standard Python 3.
 """
