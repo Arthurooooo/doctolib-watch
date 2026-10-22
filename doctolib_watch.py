@@ -277,6 +277,57 @@ def run_once():
     return ok
 
 
+def report():
+    """Check immediat + notif de bilan, meme s'il n'y a rien de nouveau."""
+    state = load_state()
+    lines = []
+    for doc in DOCTORS:
+        name = doc["name"]
+        try:
+            data = fetch(build_url(resolve_url(doc, state)))
+        except Exception as e:
+            lines.append(f"{name} : erreur ({e})")
+            continue
+        slots = [s for s in extract_slots(data) if in_window(s)]
+        nxt = data.get("next_slot")
+        if slots:
+            lines.append(f"{name} : {len(slots)} creneau(x), premier {fmt(slots[0])}")
+        elif nxt and in_window(nxt):
+            lines.append(f"{name} : prochain jour dispo {fmt(nxt)}")
+        else:
+            lines.append(f"{name} : rien entre le {NOT_BEFORE[8:]}/{NOT_BEFORE[5:7]} et le {NOT_AFTER[8:]}/{NOT_AFTER[5:7]}")
+    save_state(state)
+    msg = "\n".join(lines) or "Aucun medecin configure."
+    log("Bilan : " + msg.replace("\n", " | "))
+    notify("Check manuel Doctolib", msg)
+
+
+def listen(cmd_topic):
+    """Ecoute un topic ntfy : chaque message recu declenche un check manuel."""
+    url = f"https://ntfy.sh/{cmd_topic}/json"
+    log(f"En ecoute sur ntfy.sh/{cmd_topic}")
+    last = 0.0
+    while True:
+        try:
+            with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "doctolib-watch"}), timeout=90) as r:
+                for raw in r:
+                    try:
+                        ev = json.loads(raw.decode("utf-8"))
+                    except Exception:
+                        continue
+                    if ev.get("event") != "message":
+                        continue
+                    if time.time() - last < 60:  # anti-spam : 1 check manuel par minute max
+                        notify("Check manuel Doctolib", "Deja fait il y a moins d'une minute, reessaie dans un instant.")
+                        continue
+                    last = time.time()
+                    log("Check manuel demande")
+                    report()
+        except Exception as e:
+            log(f"Ecoute interrompue ({e}), reconnexion dans 15 s")
+            time.sleep(15)
+
+
 def probe(booking_url, keyword=None):
     """Test manuel : Doctolib repond-il, quels motifs, et des dispos ?"""
     print(f"1) Lecture de la fiche ({profile_slug(booking_url)})...")
@@ -325,6 +376,15 @@ def main():
             print('Usage : --probe "<lien fiche Doctolib>" [mot du motif]')
             return
         probe(args[0], args[1] if len(args) > 1 else None)
+        return
+    if "--report" in sys.argv:
+        report()
+        return
+    if "--listen" in sys.argv:
+        if not NTFY_TOPIC:
+            log("Pas de topic ntfy configure.")
+            return
+        listen(NTFY_TOPIC + "-check")
         return
     if "--test-notif" in sys.argv:
         notify("Test doctolib_watch", "Si tu vois ca, les notifs marchent.")
