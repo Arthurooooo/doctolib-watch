@@ -1,11 +1,7 @@
 name: Doctolib watch
 
 on:
-  schedule:
-    - cron: "*/10 * * * *"
   workflow_dispatch:
-  push:
-    branches: [main]
 
 concurrency:
   group: doctolib-watch
